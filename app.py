@@ -14,10 +14,10 @@ if 'edit_item_id' not in st.session_state:
 if 'current_filter' not in st.session_state:
     st.session_state['current_filter'] = "전체"
 
-# ★아이콘 잘림 완벽 방지 및 햄버거 버튼 세팅 CSS★
+# ★CSS 수정: 한 줄 고정 효과를 '리스트'에만 적용하고, '수정 버튼'은 원래 비율로 복구★
 st.markdown("""
     <style>
-    /* 1. 전체 화면 좌우 여백을 충분히 주어 짤림 현상 근본 차단 */
+    /* 1. 전체 화면 좌우 여백 */
     .block-container {
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
@@ -25,8 +25,8 @@ st.markdown("""
         overflow-x: hidden !important; 
     }
 
-    /* 2. 아이템 가로 배치 강제 고정 및 간격 제거 (마진으로 조절) */
-    [data-testid="stHorizontalBlock"] {
+    /* 2. 🌟핵심: '체크박스'가 있는 줄(리스트)만 강제로 가로 고정 */
+    [data-testid="stHorizontalBlock"]:has(.stCheckbox) {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
@@ -34,19 +34,18 @@ st.markdown("""
         gap: 0px !important; 
     }
     
-    [data-testid="column"] {
+    /* 3. 리스트의 텍스트 영역 컬럼 */
+    [data-testid="column"]:has(.stCheckbox) {
         min-width: 0 !important;
         padding: 0px !important;
-    }
-
-    /* 3. 텍스트 영역 컬럼: 전체 너비에서 버튼 크기(40px)를 강제로 빼서 공간 확보 */
-    [data-testid="column"]:has(.stCheckbox) {
         flex: 1 1 auto !important;
         width: calc(100% - 40px) !important; 
     }
 
-    /* 4. 버튼 영역 컬럼: 크기를 35px로 고정하고 우측 여백을 줘서 안쪽으로 당김 */
+    /* 4. 리스트의 햄버거 메뉴 컬럼 */
     [data-testid="column"]:has([data-testid="stPopover"]) {
+        min-width: 0 !important;
+        padding: 0px !important;
         flex: 0 0 35px !important;
         width: 35px !important;
         margin-right: 5px !important; 
@@ -54,7 +53,7 @@ st.markdown("""
         justify-content: flex-end;
     }
 
-    /* 5. 햄버거 메뉴(☰) 디자인: 배경 투명화 및 색상 톤다운 */
+    /* 5. 햄버거 메뉴(☰) 디자인 */
     [data-testid="stPopover"] > button {
         padding: 0px !important;
         height: 35px !important;
@@ -62,7 +61,7 @@ st.markdown("""
         border: none !important;
         background: transparent !important;
         font-size: 1.5rem !important; 
-        color: #888 !important; /* 너무 튀지 않는 회색 */
+        color: #888 !important; 
     }
     
     /* 체크박스 텍스트 상하 위치 미세 조정 */
@@ -113,7 +112,7 @@ try:
             
         for idea in ideas:
             
-            # [A] 수정 모드
+            # [A] 수정 모드 (버튼이 화면 밖으로 나가지 않고 반반씩 정확히 나뉨)
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
                     try:
@@ -124,6 +123,7 @@ try:
                     new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{idea['id']}")
                     new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{idea['id']}")
                     
+                    # 여기서 생성되는 컬럼은 리스트용 CSS의 영향을 받지 않음
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
                         if st.button("💾 저장", key=f"save_{idea['id']}", use_container_width=True):
