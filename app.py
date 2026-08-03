@@ -8,16 +8,19 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
-# 세션 상태 초기화
+# 세션 상태 초기화 (창 열림/닫힘 상태 추가)
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 if 'current_filter' not in st.session_state:
     st.session_state['current_filter'] = "전체"
+if 'show_form' not in st.session_state:
+    st.session_state['show_form'] = False
+if 'show_success' not in st.session_state:
+    st.session_state['show_success'] = False
 
-# ★CSS 수정: 한 줄 고정 효과를 '리스트'에만 적용하고, '수정 버튼'은 원래 비율로 복구★
+# ★CSS: 리스트 항목 한 줄 고정 및 디자인★
 st.markdown("""
     <style>
-    /* 1. 전체 화면 좌우 여백 */
     .block-container {
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
@@ -25,7 +28,6 @@ st.markdown("""
         overflow-x: hidden !important; 
     }
 
-    /* 2. 🌟핵심: '체크박스'가 있는 줄(리스트)만 강제로 가로 고정 */
     [data-testid="stHorizontalBlock"]:has(.stCheckbox) {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
@@ -34,7 +36,6 @@ st.markdown("""
         gap: 0px !important; 
     }
     
-    /* 3. 리스트의 텍스트 영역 컬럼 */
     [data-testid="column"]:has(.stCheckbox) {
         min-width: 0 !important;
         padding: 0px !important;
@@ -42,7 +43,6 @@ st.markdown("""
         width: calc(100% - 40px) !important; 
     }
 
-    /* 4. 리스트의 햄버거 메뉴 컬럼 */
     [data-testid="column"]:has([data-testid="stPopover"]) {
         min-width: 0 !important;
         padding: 0px !important;
@@ -53,7 +53,6 @@ st.markdown("""
         justify-content: flex-end;
     }
 
-    /* 5. 햄버거 메뉴(☰) 디자인 */
     [data-testid="stPopover"] > button {
         padding: 0px !important;
         height: 35px !important;
@@ -64,7 +63,6 @@ st.markdown("""
         color: #888 !important; 
     }
     
-    /* 체크박스 텍스트 상하 위치 미세 조정 */
     .stCheckbox { margin-top: 5px !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -74,16 +72,35 @@ st.title("📝 우리 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
 FILTER_LIST = ["전체"] + CATEGORY_LIST
 
-# --- 1. 새로운 항목 추가 (확장형 폼) ---
-with st.expander("➕ 새로운 데이트 추가하기"):
-    with st.form("new_idea_form", clear_on_submit=True):
-        category = st.selectbox("카테고리", CATEGORY_LIST)
-        title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
+# --- 0. 성공 메시지 띄우기 ---
+if st.session_state['show_success']:
+    st.success("데이트 목록에 추가되었어요! 🥰")
+    st.session_state['show_success'] = False # 한 번 보여주고 초기화
+
+# --- 1. 새로운 항목 추가 (직접 컨트롤하는 토글 창) ---
+if not st.session_state['show_form']:
+    # 평소에는 버튼만 보임
+    if st.button("➕ 새로운 데이트 추가하기", use_container_width=True):
+        st.session_state['show_form'] = True
+        st.rerun()
+else:
+    # 버튼을 누르면 입력 폼이 나타남
+    with st.container(border=True):
+        with st.form("new_idea_form", clear_on_submit=True):
+            category = st.selectbox("카테고리", CATEGORY_LIST)
+            title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
+            
+            submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
+            if submitted and title:
+                supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
+                # 추가 성공 시 상태를 변경하고 창을 닫음
+                st.session_state['show_success'] = True
+                st.session_state['show_form'] = False
+                st.rerun()
         
-        submitted = st.form_submit_button("추가하기", use_container_width=True)
-        if submitted and title:
-            supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
-            st.success("추가 완료!")
+        # 입력 폼 아래에 닫기 버튼 별도 배치
+        if st.button("닫기 🔺", use_container_width=True):
+            st.session_state['show_form'] = False
             st.rerun()
 
 st.divider()
@@ -106,13 +123,12 @@ try:
     if not ideas:
         st.info("아직 저장된 데이트 리스트가 없습니다.")
     else:
-        # 필터링 로직
         if st.session_state['current_filter'] != "전체":
             ideas = [idea for idea in ideas if idea['category'] == st.session_state['current_filter']]
             
         for idea in ideas:
             
-            # [A] 수정 모드 (버튼이 화면 밖으로 나가지 않고 반반씩 정확히 나뉨)
+            # [A] 수정 모드
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
                     try:
@@ -123,7 +139,6 @@ try:
                     new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{idea['id']}")
                     new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{idea['id']}")
                     
-                    # 여기서 생성되는 컬럼은 리스트용 CSS의 영향을 받지 않음
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
                         if st.button("💾 저장", key=f"save_{idea['id']}", use_container_width=True):
@@ -139,7 +154,6 @@ try:
             else:
                 col1, col2 = st.columns([9, 1]) 
                 
-                # 텍스트 및 체크박스
                 with col1:
                     title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
                     is_checked = st.checkbox(title_text, value=idea['is_done'], key=f"check_{idea['id']}")
@@ -147,7 +161,6 @@ try:
                         supabase.table("date_ideas").update({"is_done": is_checked}).eq("id", idea['id']).execute()
                         st.rerun()
                         
-                # 햄버거(☰) 버튼 영역
                 with col2:
                     with st.popover("☰", use_container_width=False):
                         if st.button("✏️ 수정", key=f"edit_{idea['id']}", use_container_width=True):
