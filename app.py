@@ -18,30 +18,42 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# ★CSS: 불필요한 여백 제거 및 리스트 디자인 유지★
+# ★CSS: 아이템 간격을 70 수준으로 촘촘하게 압축★
 st.markdown("""
     <style>
     .block-container {
-        padding-top: 2rem !important; /* 최상단 여백도 살짝 줄임 */
+        padding-top: 1.5rem !important;
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
         max-width: 100% !important;
         overflow-x: hidden !important; 
     }
 
-    /* 🌟 추가된 부분: 가로줄(hr)과 소제목(h3) 위아래 여백 대폭 축소 */
     hr {
-        margin-top: 10px !important;
-        margin-bottom: 10px !important;
+        margin-top: 5px !important;
+        margin-bottom: 5px !important;
     }
     h3 {
         padding-top: 0px !important;
-        padding-bottom: 5px !important;
+        padding-bottom: 3px !important;
         margin-top: 0px !important;
+        margin-bottom: 5px !important;
     }
-    /* 메인 타이틀 여백도 살짝 축소 */
     h1 {
-        padding-bottom: 10px !important;
+        padding-bottom: 5px !important;
+    }
+
+    /* 🌟 아이템들 간격을 좁히기 위해 체크박스 wrapper의 위아래 마진을 강제로 줄임 */
+    .stCheckbox { 
+        margin-top: 0px !important; 
+        margin-bottom: 0px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    
+    /* 체크박스 내부 컨테이너 높이 밀착 */
+    .stCheckbox > div {
+        min-height: 24px !important;
     }
 
     [data-testid="stHorizontalBlock"]:has(.stCheckbox) {
@@ -71,15 +83,13 @@ st.markdown("""
 
     [data-testid="stPopover"] > button {
         padding: 0px !important;
-        height: 35px !important;
+        height: 30px !important;
         width: 30px !important; 
         border: none !important;
         background: transparent !important;
-        font-size: 1.5rem !important; 
+        font-size: 1.3rem !important; 
         color: #888 !important; 
     }
-    
-    .stCheckbox { margin-top: 5px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -182,7 +192,7 @@ try:
                             supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
                             st.rerun()
                         
-                st.markdown("<hr style='margin: 0px 0px 10px 0px;'/>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"데이터베이스 연결 에러: {e}")
