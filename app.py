@@ -49,7 +49,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📝 다음에 우리 여기 가자!")
+st.title("📝 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "☕ 카페", "🏖️ 여행", "🎯 액티비티"]
 
 # --- 1. 새로운 항목 추가 (입력하기 편한 위아래 배치) ---
