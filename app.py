@@ -8,18 +8,37 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
-# 수정 모드를 관리하기 위한 세션 상태 초기화
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 
-# 모바일 UI 깔끔하게 다듬기 (버튼 크기 및 여백 최소화)
 st.markdown("""
     <style>
-    .stButton > button { padding: 0px 5px !important; height: 35px; }
+    /* 1. 모바일 화면에서 줄바꿈 현상 완전 차단 & 세로 중앙 정렬 */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        align-items: center !important; 
+    }
+    
+    /* 2. 텍스트가 길어도 버튼 영역을 밀어내지 않게 컬럼 속성 부여 */
+    [data-testid="column"] {
+        min-width: 0 !important; 
+    }
+
+    /* 3. 버튼 크기 및 좌우 여백을 최소화하여 앱처럼 타이트하게 배치 */
+    .stButton > button { 
+        padding: 0px !important; 
+        height: 32px !important; 
+        min-height: 32px !important;
+    }
+    
+    /* 4. 체크박스와 버튼이 일직선에 오도록 높이 미세 조정 */
+    .stCheckbox { 
+        margin-top: 4px !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📝 다음에 우리 여기 가자!")
+st.title("📝 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "☕ 카페", "🏖️ 여행", "🎯 액티비티"]
 
 # --- 1. 새로운 항목 추가 ---
@@ -49,10 +68,9 @@ try:
     else:
         for idea in ideas:
             
-            # [A] 수정 아이콘을 눌러 '수정 모드'가 된 항목의 화면
+            # [A] 수정 모드 화면
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
-                    # 기본 카테고리 인덱스 찾기
                     try:
                         default_idx = CATEGORY_LIST.index(idea['category'])
                     except ValueError:
@@ -68,17 +86,17 @@ try:
                     with btn_col1:
                         if st.button("💾 저장", key=f"save_{idea['id']}", use_container_width=True):
                             supabase.table("date_ideas").update({"title": new_title, "category": new_category}).eq("id", idea['id']).execute()
-                            st.session_state['edit_item_id'] = None # 수정 모드 종료
+                            st.session_state['edit_item_id'] = None
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ 취소", key=f"cancel_{idea['id']}", use_container_width=True):
-                            st.session_state['edit_item_id'] = None # 수정 모드 종료
+                            st.session_state['edit_item_id'] = None
                             st.rerun()
             
-            # [B] 평상시 '일반 모드' 화면 (우측에 작은 아이콘 배치)
+            # [B] 일반 리스트 화면 (한 줄에 텍스트와 아이콘 배치)
             else:
-                # 비율: 체크박스 글씨(7.5), 수정 아이콘(1.2), 삭제 아이콘(1.3)
-                col1, col2, col3 = st.columns([7.5, 1.2, 1.3])
+                # 가로 비율 고정 (텍스트 영역 75%, 수정 아이콘 12.5%, 삭제 아이콘 12.5%)
+                col1, col2, col3 = st.columns([7.5, 1.25, 1.25])
                 
                 with col1:
                     title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
@@ -88,17 +106,15 @@ try:
                         st.rerun()
                         
                 with col2:
-                    if st.button("✏️", key=f"edit_{idea['id']}"):
-                        # 클릭한 항목의 id를 세션에 저장하여 수정 모드로 전환
+                    if st.button("✏️", key=f"edit_{idea['id']}", help="수정"):
                         st.session_state['edit_item_id'] = idea['id']
                         st.rerun()
                         
                 with col3:
-                    if st.button("🗑️", key=f"del_{idea['id']}"):
+                    if st.button("🗑️", key=f"del_{idea['id']}", help="삭제"):
                         supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
                         st.rerun()
                         
-                # 항목 간 얇은 구분선
                 st.markdown("<hr style='margin: 5px 0px 10px 0px;'/>", unsafe_allow_html=True)
 
 except Exception as e:
