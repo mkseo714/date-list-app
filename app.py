@@ -11,29 +11,34 @@ st.set_page_config(page_title="우리의 데이트 리스트", layout="centered"
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 
+# ★CSS 수정: 화면 밖으로 나가는 현상 완벽 방지★
 st.markdown("""
     <style>
-    /* 1. 모바일 화면에서 줄바꿈 현상 완전 차단 & 세로 중앙 정렬 */
+    /* 1. 컬럼들을 가로 한 줄로 묶되, 아이템 사이의 간격을 줄여서 화면 밖으로 밀려나는 것을 막음 */
     [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important; 
+        gap: 5px !important; 
+        width: 100% !important;
     }
     
-    /* 2. 텍스트가 길어도 버튼 영역을 밀어내지 않게 컬럼 속성 부여 */
+    /* 2. 텍스트가 아무리 길어도 화면 밖으로 나가지 않고 안에서 줄어들게 만듦 */
     [data-testid="column"] {
         min-width: 0 !important; 
+        flex-shrink: 1 !important;
     }
 
-    /* 3. 버튼 크기 및 좌우 여백을 최소화하여 앱처럼 타이트하게 배치 */
+    /* 3. 버튼이 좁은 영역 안에 쏙 들어가도록 가로 100% 사용 설정 */
     .stButton > button { 
-        padding: 0px !important; 
-        height: 32px !important; 
-        min-height: 32px !important;
+        padding: 0px 5px !important; 
+        height: 35px !important; 
+        min-height: 35px !important;
+        width: 100% !important;
     }
     
-    /* 4. 체크박스와 버튼이 일직선에 오도록 높이 미세 조정 */
+    /* 4. 체크박스 높이 조절 */
     .stCheckbox { 
-        margin-top: 4px !important; 
+        margin-top: 5px !important; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -41,13 +46,10 @@ st.markdown("""
 st.title("📝 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "☕ 카페", "🏖️ 여행", "🎯 액티비티"]
 
-# --- 1. 새로운 항목 추가 ---
+# --- 1. 새로운 항목 추가 (위아래 배치 원복) ---
 with st.form("new_idea_form", clear_on_submit=True):
-    col1, col2 = st.columns([3, 7])
-    with col1:
-        category = st.selectbox("카테고리", CATEGORY_LIST, label_visibility="collapsed")
-    with col2:
-        title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?", label_visibility="collapsed")
+    category = st.selectbox("카테고리", CATEGORY_LIST)
+    title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
     
     submitted = st.form_submit_button("추가하기", use_container_width=True)
     if submitted and title:
@@ -68,7 +70,7 @@ try:
     else:
         for idea in ideas:
             
-            # [A] 수정 모드 화면
+            # [A] 수정 모드 (입력하기 편하게 위아래 배치로 변경)
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
                     try:
@@ -76,11 +78,8 @@ try:
                     except ValueError:
                         default_idx = 0
                         
-                    edit_col1, edit_col2 = st.columns([4, 6])
-                    with edit_col1:
-                        new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{idea['id']}", label_visibility="collapsed")
-                    with edit_col2:
-                        new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{idea['id']}", label_visibility="collapsed")
+                    new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{idea['id']}")
+                    new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{idea['id']}")
                     
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
@@ -93,10 +92,9 @@ try:
                             st.session_state['edit_item_id'] = None
                             st.rerun()
             
-            # [B] 일반 리스트 화면 (한 줄에 텍스트와 아이콘 배치)
+            # [B] 일반 리스트 화면 (버튼이 잘리지 않도록 비율을 7 : 1.5 : 1.5 로 조정)
             else:
-                # 가로 비율 고정 (텍스트 영역 75%, 수정 아이콘 12.5%, 삭제 아이콘 12.5%)
-                col1, col2, col3 = st.columns([7.5, 1.25, 1.25])
+                col1, col2, col3 = st.columns([7, 1.5, 1.5])
                 
                 with col1:
                     title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
