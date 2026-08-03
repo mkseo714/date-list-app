@@ -14,56 +14,68 @@ if 'edit_item_id' not in st.session_state:
 if 'current_filter' not in st.session_state:
     st.session_state['current_filter'] = "전체"
 
-# ★모바일 화면 밀림 및 버튼 늘어남 현상 완벽 해결 CSS★
+# ★아이콘 잘림 완벽 방지 및 햄버거 버튼 세팅 CSS★
 st.markdown("""
     <style>
-    /* 1. 모바일에서 화면이 작아져도 두 줄로 나뉘지 않게 강제 한 줄 유지 */
+    /* 1. 전체 화면 좌우 여백을 충분히 주어 짤림 현상 근본 차단 */
+    .block-container {
+        padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important; 
+    }
+
+    /* 2. 아이템 가로 배치 강제 고정 및 간격 제거 (마진으로 조절) */
     [data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
+        width: 100% !important;
+        gap: 0px !important; 
     }
     
-    /* 2. 컬럼 기본 여백 0으로 초기화 */
     [data-testid="column"] {
         min-width: 0 !important;
         padding: 0px !important;
     }
 
-    /* 3. 체크박스가 들어있는 컬럼(텍스트 영역)은 유연하게 최대한 넓게 차지 */
+    /* 3. 텍스트 영역 컬럼: 전체 너비에서 버튼 크기(40px)를 강제로 빼서 공간 확보 */
     [data-testid="column"]:has(.stCheckbox) {
         flex: 1 1 auto !important;
-        width: 100% !important;
+        width: calc(100% - 40px) !important; 
     }
 
-    /* 4. 팝오버(설정버튼)가 들어있는 컬럼은 우측 끝 40px로 작게 고정 */
+    /* 4. 버튼 영역 컬럼: 크기를 35px로 고정하고 우측 여백을 줘서 안쪽으로 당김 */
     [data-testid="column"]:has([data-testid="stPopover"]) {
-        flex: 0 0 40px !important;
-        width: 40px !important;
+        flex: 0 0 35px !important;
+        width: 35px !important;
+        margin-right: 5px !important; 
+        display: flex;
+        justify-content: flex-end;
     }
 
-    /* 5. 톱니바퀴 버튼을 배경 없는 투명하고 작은 아이콘처럼 디자인 */
+    /* 5. 햄버거 메뉴(☰) 디자인: 배경 투명화 및 색상 톤다운 */
     [data-testid="stPopover"] > button {
         padding: 0px !important;
         height: 35px !important;
-        width: 100% !important;
+        width: 30px !important; 
         border: none !important;
         background: transparent !important;
-        font-size: 1.2rem !important;
+        font-size: 1.5rem !important; 
+        color: #888 !important; /* 너무 튀지 않는 회색 */
     }
     
-    /* 6. 체크박스 텍스트 상하 위치 미세 조정 */
+    /* 체크박스 텍스트 상하 위치 미세 조정 */
     .stCheckbox { margin-top: 5px !important; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📝 이거 하자!")
+st.title("📝 우리 이거 하자!")
 
-# 카페 제거 및 카테고리 필터 세팅
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
 FILTER_LIST = ["전체"] + CATEGORY_LIST
 
-# --- 1. 새로운 항목 추가 (평소엔 숨겨져 있는 화살표 확장형 폼) ---
+# --- 1. 새로운 항목 추가 (확장형 폼) ---
 with st.expander("➕ 새로운 데이트 추가하기"):
     with st.form("new_idea_form", clear_on_submit=True):
         category = st.selectbox("카테고리", CATEGORY_LIST)
@@ -78,7 +90,6 @@ with st.expander("➕ 새로운 데이트 추가하기"):
 st.divider()
 
 # --- 2. 카테고리 필터 버튼 ---
-# 가로로 정렬되는 버튼형 라디오 사용
 st.session_state['current_filter'] = st.radio(
     "카테고리 필터", 
     FILTER_LIST, 
@@ -88,7 +99,7 @@ st.session_state['current_filter'] = st.radio(
 
 st.subheader("📌 저장된 리스트")
 
-# --- 3. 리스트 출력 및 수정/삭제 팝오버 메뉴 ---
+# --- 3. 리스트 출력 및 메뉴 ---
 try:
     response = supabase.table("date_ideas").select("*").order("created_at", desc=True).execute()
     ideas = response.data
@@ -96,13 +107,13 @@ try:
     if not ideas:
         st.info("아직 저장된 데이트 리스트가 없습니다.")
     else:
-        # 상단에서 선택한 버튼에 따라 리스트 필터링
+        # 필터링 로직
         if st.session_state['current_filter'] != "전체":
             ideas = [idea for idea in ideas if idea['category'] == st.session_state['current_filter']]
             
         for idea in ideas:
             
-            # [A] ⚙️ 설정에서 '수정'을 눌렀을 때 열리는 모드
+            # [A] 수정 모드
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
                     try:
@@ -124,11 +135,11 @@ try:
                             st.session_state['edit_item_id'] = None
                             st.rerun()
             
-            # [B] 일반 리스트 화면
+            # [B] 일반 리스트 화면 (잘림 방지 적용)
             else:
-                col1, col2 = st.columns([9, 1]) # 가로 비율 부여 (CSS가 모바일에서 이 비율을 강제로 유지시켜 줌)
+                col1, col2 = st.columns([9, 1]) 
                 
-                # 텍스트 및 체크박스 영역
+                # 텍스트 및 체크박스
                 with col1:
                     title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
                     is_checked = st.checkbox(title_text, value=idea['is_done'], key=f"check_{idea['id']}")
@@ -136,9 +147,9 @@ try:
                         supabase.table("date_ideas").update({"is_done": is_checked}).eq("id", idea['id']).execute()
                         st.rerun()
                         
-                # 우측 끝 설정(톱니바퀴) 버튼 영역
+                # 햄버거(☰) 버튼 영역
                 with col2:
-                    with st.popover("⚙️", use_container_width=False):
+                    with st.popover("☰", use_container_width=False):
                         if st.button("✏️ 수정", key=f"edit_{idea['id']}", use_container_width=True):
                             st.session_state['edit_item_id'] = idea['id']
                             st.rerun()
