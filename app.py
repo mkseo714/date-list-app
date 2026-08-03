@@ -8,65 +8,61 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
+# 세션 상태 초기화
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
+if 'current_filter' not in st.session_state:
+    st.session_state['current_filter'] = "전체"
 
-# ★최종 해결 CSS: 숨겨진 여백(Padding) 강제 제거 및 스크롤 차단★
+# CSS 정리: 지저분했던 강제 여백 제거하고 심플하게 유지
 st.markdown("""
     <style>
-    /* 1. 전체 좌우 여백을 줄여 공간 확보 & 가로 스크롤 완전 차단 */
-    .block-container {
-        padding-left: 15px !important;
-        padding-right: 15px !important;
-        overflow-x: hidden !important; 
-    }
-
-    /* 2. 아이템들을 무조건 한 줄로 유지하고 간격 최적화 */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        gap: 4px !important; 
-    }
-    
-    /* 3. ★핵심★: 컬럼의 '숨겨진 기본 여백'을 0으로 만들어서 밖으로 밀려나는 것을 완벽 차단 */
-    [data-testid="column"] {
-        min-width: 0 !important; 
-        padding: 0px !important;
-    }
-
-    /* 4. 버튼이 좁은 컬럼 영역 안에 쏙 들어가도록 크기 고정 */
-    .stButton > button { 
-        padding: 0px !important; 
-        height: 35px !important; 
-        min-height: 35px !important;
-        width: 100% !important;
-    }
-    
-    /* 5. 체크박스 위치 미세조정 */
+    /* 체크박스 위치 미세조정 */
     .stCheckbox { 
         margin-top: 5px !important; 
-        padding-left: 5px !important;
+    }
+    /* 팝오버(옵션) 버튼을 둥글고 작게 만들어 화면 밖으로 나가지 않게 함 */
+    [data-testid="stPopover"] > button {
+        padding: 0px !important;
+        height: 35px !important;
+        width: 100% !important;
+        border-radius: 8px !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📝 이거 하자!")
-CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "☕ 카페", "🏖️ 여행", "🎯 액티비티"]
 
-# --- 1. 새로운 항목 추가 (입력하기 편한 위아래 배치) ---
-with st.form("new_idea_form", clear_on_submit=True):
-    category = st.selectbox("카테고리", CATEGORY_LIST)
-    title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
-    
-    submitted = st.form_submit_button("추가하기", use_container_width=True)
-    if submitted and title:
-        supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
-        st.success("추가 완료!")
-        st.rerun()
+# 카페 카테고리 삭제 및 필터 리스트 생성
+CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
+FILTER_LIST = ["전체"] + CATEGORY_LIST
+
+# --- 1. 새로운 항목 추가 (숨겨진 확장 폼) ---
+with st.expander("➕ 새로운 데이트 추가하기"):
+    with st.form("new_idea_form", clear_on_submit=True):
+        category = st.selectbox("카테고리", CATEGORY_LIST)
+        title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
+        
+        submitted = st.form_submit_button("추가하기", use_container_width=True)
+        if submitted and title:
+            supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
+            st.success("추가 완료!")
+            st.rerun()
 
 st.divider()
+
+# --- 2. 카테고리 필터 버튼 ---
+# 모바일에서도 가로로 예쁘게 정렬되는 라디오 버튼 형태 사용
+st.session_state['current_filter'] = st.radio(
+    "카테고리 필터", 
+    FILTER_LIST, 
+    horizontal=True, 
+    label_visibility="collapsed"
+)
+
 st.subheader("📌 저장된 리스트")
 
-# --- 2. 리스트 출력 및 아이콘 배치 ---
+# --- 3. 리스트 출력 및 옵션 버튼 ---
 try:
     response = supabase.table("date_ideas").select("*").order("created_at", desc=True).execute()
     ideas = response.data
@@ -74,9 +70,13 @@ try:
     if not ideas:
         st.info("아직 저장된 데이트 리스트가 없습니다.")
     else:
+        # 선택된 필터에 따라 리스트 걸러내기
+        if st.session_state['current_filter'] != "전체":
+            ideas = [idea for idea in ideas if idea['category'] == st.session_state['current_filter']]
+            
         for idea in ideas:
             
-            # [A] 수정 모드
+            # [A] 수정 모드 (입력 폼)
             if st.session_state['edit_item_id'] == idea['id']:
                 with st.container(border=True):
                     try:
@@ -98,10 +98,10 @@ try:
                             st.session_state['edit_item_id'] = None
                             st.rerun()
             
-            # [B] 일반 리스트 화면 (버튼이 절대 화면 밖으로 나가지 않는 황금 비율 분배)
+            # [B] 일반 리스트 화면 (더보기 메뉴 활용으로 잘림 현상 완벽 해결)
             else:
-                # 텍스트(76%), 수정버튼(12%), 삭제버튼(12%) 비율
-                col1, col2, col3 = st.columns([7.6, 1.2, 1.2])
+                # 텍스트(8.5) vs 설정버튼(1.5) 비율
+                col1, col2 = st.columns([8.5, 1.5])
                 
                 with col1:
                     title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
@@ -111,16 +111,16 @@ try:
                         st.rerun()
                         
                 with col2:
-                    if st.button("✏️", key=f"edit_{idea['id']}", help="수정"):
-                        st.session_state['edit_item_id'] = idea['id']
-                        st.rerun()
+                    # 톱니바퀴 버튼을 누르면 아래로 수정/삭제 메뉴가 펼쳐짐
+                    with st.popover("⚙️", use_container_width=True):
+                        if st.button("✏️ 수정", key=f"edit_{idea['id']}", use_container_width=True):
+                            st.session_state['edit_item_id'] = idea['id']
+                            st.rerun()
+                        if st.button("🗑️ 삭제", key=f"del_{idea['id']}", use_container_width=True):
+                            supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
+                            st.rerun()
                         
-                with col3:
-                    if st.button("🗑️", key=f"del_{idea['id']}", help="삭제"):
-                        supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
-                        st.rerun()
-                        
-                st.markdown("<hr style='margin: 5px 0px 10px 0px;'/>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 0px 0px 10px 0px;'/>", unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"데이터베이스 연결 에러: {e}")
