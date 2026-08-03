@@ -8,7 +8,7 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
-# 세션 상태 초기화 (창 열림/닫힘 상태 추가)
+# 세션 상태 초기화 
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 if 'current_filter' not in st.session_state:
@@ -18,14 +18,30 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# ★CSS: 리스트 항목 한 줄 고정 및 디자인★
+# ★CSS: 불필요한 여백 제거 및 리스트 디자인 유지★
 st.markdown("""
     <style>
     .block-container {
+        padding-top: 2rem !important; /* 최상단 여백도 살짝 줄임 */
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
         max-width: 100% !important;
         overflow-x: hidden !important; 
+    }
+
+    /* 🌟 추가된 부분: 가로줄(hr)과 소제목(h3) 위아래 여백 대폭 축소 */
+    hr {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+    }
+    h3 {
+        padding-top: 0px !important;
+        padding-bottom: 5px !important;
+        margin-top: 0px !important;
+    }
+    /* 메인 타이틀 여백도 살짝 축소 */
+    h1 {
+        padding-bottom: 10px !important;
     }
 
     [data-testid="stHorizontalBlock"]:has(.stCheckbox) {
@@ -72,19 +88,17 @@ st.title("📝 우리 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
 FILTER_LIST = ["전체"] + CATEGORY_LIST
 
-# --- 0. 성공 메시지 띄우기 ---
+# --- 0. 성공 메시지 ---
 if st.session_state['show_success']:
     st.success("데이트 목록에 추가되었어요! 🥰")
-    st.session_state['show_success'] = False # 한 번 보여주고 초기화
+    st.session_state['show_success'] = False 
 
-# --- 1. 새로운 항목 추가 (직접 컨트롤하는 토글 창) ---
+# --- 1. 새로운 항목 추가 ---
 if not st.session_state['show_form']:
-    # 평소에는 버튼만 보임
     if st.button("➕ 새로운 데이트 추가하기", use_container_width=True):
         st.session_state['show_form'] = True
         st.rerun()
 else:
-    # 버튼을 누르면 입력 폼이 나타남
     with st.container(border=True):
         with st.form("new_idea_form", clear_on_submit=True):
             category = st.selectbox("카테고리", CATEGORY_LIST)
@@ -93,12 +107,10 @@ else:
             submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
             if submitted and title:
                 supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
-                # 추가 성공 시 상태를 변경하고 창을 닫음
                 st.session_state['show_success'] = True
                 st.session_state['show_form'] = False
                 st.rerun()
         
-        # 입력 폼 아래에 닫기 버튼 별도 배치
         if st.button("닫기 🔺", use_container_width=True):
             st.session_state['show_form'] = False
             st.rerun()
@@ -150,7 +162,7 @@ try:
                             st.session_state['edit_item_id'] = None
                             st.rerun()
             
-            # [B] 일반 리스트 화면 (잘림 방지 적용)
+            # [B] 일반 리스트 화면
             else:
                 col1, col2 = st.columns([9, 1]) 
                 
