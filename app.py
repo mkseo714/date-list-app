@@ -124,8 +124,8 @@ else:
 
 st.divider()
 
-# --- 🌟 [탭 메뉴 구조 도입] 상단에 고정되는 네이티브 탭 인터페이스 ---
-selected_tab = st.tabs(TAB_LIST)
+# --- 탭 메뉴 구조 도입 ---
+selected_tabs = st.tabs(TAB_LIST)
 
 # --- 데이터 불러오기 ---
 try:
@@ -135,10 +135,9 @@ try:
     if not ideas:
         st.info("아직 저장된 데이트 리스트가 없습니다.")
     else:
-        # 각 탭(전체, 맛집, 영화, 여행, 액티비티)별로 리스트 매핑
+        # 각 탭별로 순회하며 고유 키 부여
         for i, tab_name in enumerate(TAB_LIST):
-            with selected_tab[i]:
-                # 탭 이름에 맞춰 필터링
+            with selected_tabs[i]:
                 if tab_name == "전체":
                     filtered_ideas = ideas
                 else:
@@ -150,7 +149,7 @@ try:
                     st.subheader(f"📌 {tab_name} 리스트")
                     
                     for idea in filtered_ideas:
-                        # [A] 수정 모드
+                        # [A] 수정 모드 (탭별 고유 키 적용)
                         if st.session_state['edit_item_id'] == idea['id']:
                             with st.container(border=True):
                                 try:
@@ -158,37 +157,37 @@ try:
                                 except ValueError:
                                     default_idx = 0
                                     
-                                new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{idea['id']}")
-                                new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{idea['id']}")
+                                new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{tab_name}_{idea['id']}")
+                                new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{tab_name}_{idea['id']}")
                                 
                                 btn_col1, btn_col2 = st.columns(2)
                                 with btn_col1:
-                                    if st.button("💾 저장", key=f"save_{idea['id']}", use_container_width=True):
+                                    if st.button("💾 저장", key=f"save_{tab_name}_{idea['id']}", use_container_width=True):
                                         supabase.table("date_ideas").update({"title": new_title, "category": new_category}).eq("id", idea['id']).execute()
                                         st.session_state['edit_item_id'] = None
                                         st.rerun()
                                 with btn_col2:
-                                    if st.button("❌ 취소", key=f"cancel_{idea['id']}", use_container_width=True):
+                                    if st.button("❌ 취소", key=f"cancel_{tab_name}_{idea['id']}", use_container_width=True):
                                         st.session_state['edit_item_id'] = None
                                         st.rerun()
                         
-                        # [B] 일반 리스트 화면
+                        # [B] 일반 리스트 화면 (탭별 고유 키 적용)
                         else:
                             col1, col2 = st.columns([9, 1]) 
                             
                             with col1:
                                 title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
-                                is_checked = st.checkbox(title_text, value=idea['is_done'], key=f"check_{idea['id']}")
+                                is_checked = st.checkbox(title_text, value=idea['is_done'], key=f"check_{tab_name}_{idea['id']}")
                                 if is_checked != idea['is_done']:
                                     supabase.table("date_ideas").update({"is_done": is_checked}).eq("id", idea['id']).execute()
                                     st.rerun()
                                     
                             with col2:
                                 with st.popover("☰", use_container_width=False):
-                                    if st.button("✏️ 수정", key=f"edit_{idea['id']}", use_container_width=True):
+                                    if st.button("✏️ 수정", key=f"edit_{tab_name}_{idea['id']}", use_container_width=True):
                                         st.session_state['edit_item_id'] = idea['id']
                                         st.rerun()
-                                    if st.button("🗑️ 삭제", key=f"del_{idea['id']}", use_container_width=True):
+                                    if st.button("🗑️ 삭제", key=f"del_{tab_name}_{idea['id']}", use_container_width=True):
                                         supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
                                         st.rerun()
                                     
