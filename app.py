@@ -22,7 +22,7 @@ if 'show_success' not in st.session_state:
 # --- 1. 구글 스프레드시트 DB 연결 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 🔥 [핵심 방어 코드] 저장 함수
+# 🔥 저장 함수 (동기화 에러 유발 요인 제거, local_df로 완벽 제어)
 def save_to_db(dataframe):
     save_df = dataframe.copy()
     save_df['is_done'] = save_df['is_done'].apply(lambda x: "TRUE" if x else "FALSE")
@@ -33,11 +33,10 @@ def save_to_db(dataframe):
     st.session_state['local_df'] = dataframe.copy()
     st.session_state['last_update_time'] = time.time()
 
-# --- 2. 데이터 불러오기 (철통 방어 로직 적용) ---
+# --- 2. 데이터 불러오기 ---
 try:
     raw_df = conn.read(worksheet="Sheet1", ttl=5)
     
-    # 🔥 내가 수정한 지 5초가 안 지났다면, 예전 데이터(raw_df)를 무시하고 최신 데이터(local_df)를 사용!
     if time.time() - st.session_state['last_update_time'] < 5 and not st.session_state['local_df'].empty:
         df = st.session_state['local_df'].copy()
     else:
@@ -196,15 +195,9 @@ else:
                             
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
-                            # 상태가 바뀌었을 때만 DB를 업데이트하고 다른 탭과 동기화
+                            # 억지 동기화 코드를 제거하고 깔끔하게 원본 데이터만 업데이트
                             if is_checked != item_is_done:
                                 df.loc[df['id'] == item_id, 'is_done'] = is_checked
-                                
-                                # 🔥 전체 탭과 카테고리 탭의 체크 상태를 강제로 일치시켜 루프 차단
-                                for t in TAB_LIST:
-                                    if f"check_{t}_{item_id}" in st.session_state:
-                                        st.session_state[f"check_{t}_{item_id}"] = is_checked
-                                        
                                 save_to_db(df)
                                 st.rerun()
                                 
