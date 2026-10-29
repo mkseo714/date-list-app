@@ -1,2 +1,2 @@
-streamlit
-supabase
+st-gsheets-connection
+pandas
