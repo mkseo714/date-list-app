@@ -28,7 +28,7 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# --- CSS 디자인 (모바일 최적화 및 심볼 버튼 투명화) ---
+# --- CSS 디자인 (섞기 버튼 투명화 및 밀착 정렬) ---
 st.markdown("""
     <style>
     .block-container {
@@ -50,21 +50,21 @@ st.markdown("""
     [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
     [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
     
-    /* 🔥 [신규] 컨트롤 패널(토글+섞기심볼) 모바일 강제 한 줄 정렬 */
+    /* 🔥 [수정] 컨트롤 패널(토글+섞기심볼) 한 줄 정렬 */
     [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) { 
         flex-direction: row !important; 
         flex-wrap: nowrap !important; 
         align-items: center !important; 
     }
     
-    /* 🔥 [신규] 섞기 버튼을 투명한 아이콘으로 만들고 가장 왼쪽으로 밀착 */
+    /* 🔥 [수정] 섞기 버튼의 회색 테두리를 완전히 없애고 투명한 아이콘처럼 만들기 */
     [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) div[data-testid="stButton"] > button {
-        justify-content: flex-start !important;
-        padding: 0px !important;
         border: none !important;
         background: transparent !important;
-        font-size: 1.8rem !important;
+        font-size: 1.5rem !important;
         box-shadow: none !important;
+        padding: 0px !important;
+        margin-left: -15px !important; /* 토글 쪽으로 조금 더 밀착 */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -106,16 +106,19 @@ else:
 
 st.divider()
 
-# --- 컨트롤 패널 (토글 80%, 심볼 버튼 20% 비율 할당) ---
-ctrl_col1, ctrl_col2 = st.columns([8, 2], vertical_alignment="center")
+# --- [수정] 컨트롤 패널 (토글, 섞기버튼, 빈공간으로 3등분하여 왼쪽 정렬 밀착) ---
+ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([4, 1, 5], vertical_alignment="center")
 with ctrl_col1:
     hide_completed = st.toggle("👻 완료된 항목 숨기기", value=False)
 with ctrl_col2:
-    if st.button("🔀", help="리스트 순서 섞기", use_container_width=True):
+    # use_container_width=True 를 제거하여 가로로 길게 늘어나는 것을 방지합니다.
+    if st.button("🔀", help="리스트 순서 섞기"):
         if not df.empty:
             df = df.sample(frac=1).reset_index(drop=True)
             conn.update(worksheet="Sheet1", data=df)
             st.rerun()
+with ctrl_col3:
+    st.empty() # 우측 빈 공간 채우기
 
 st.divider()
 
