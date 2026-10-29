@@ -11,7 +11,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 데이터 불러오기
 try:
-    df = conn.read(worksheet="Sheet1", ttl=0)
+    df = conn.read(worksheet="Sheet1", ttl=5)
     if df is None or df.empty or len(df.columns) == 0:
         df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
     else:
