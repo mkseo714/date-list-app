@@ -1,45 +1,58 @@
 import streamlit as st
 import pandas as pd
 import uuid
+import time
 from streamlit_gsheets import GSheetsConnection
 
 # --- 페이지 기본 설정 ---
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
-# --- 1. 구글 스프레드시트 DB 연결 ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# 🔥 [핵심 방어 코드] 구글 시트에 저장할 때 무조건 텍스트로만 꽂아넣는 전용 함수
-def save_to_db(dataframe):
-    save_df = dataframe.copy()
-    # 파이썬의 체크 상태를 구글 시트가 100% 인식하는 텍스트 "TRUE", "FALSE"로 강제 변환해서 저장
-    save_df['is_done'] = save_df['is_done'].apply(lambda x: "TRUE" if x else "FALSE")
-    conn.update(worksheet="Sheet1", data=save_df)
-    st.cache_data.clear() # 저장 직후 캐시 완벽 삭제
-
-# --- 2. 데이터 불러오기 (철통 방어 로직 적용) --- 
-try:
-    df = conn.read(worksheet="Sheet1", ttl=2) # 과부하 방지를 위해 2초 딜레이 적용
-    if df is None or df.empty or len(df.columns) == 0:
-        df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
-    else:
-        if 'is_done' not in df.columns:
-            df['is_done'] = False
-        # 🔥 구글 시트에서 읽어올 때 어떤 형태든 찰떡같이 파이썬 True/False로 번역하는 로직
-        df['is_done'] = df['is_done'].apply(
-            lambda x: True if str(x).strip().upper() in ['TRUE', '1', '1.0'] else False
-        )
-except Exception as e:
-    st.error(f"⚠️ 구글 서버 지연으로 데이터를 불러오지 못했습니다. DB 보호를 위해 앱을 일시 정지합니다. 새로고침 해주세요. (에러: {e})")
-    st.stop() 
-
-# --- 세션 상태 초기화 ---
+# --- 무한 루프 방지용 세션 상태 추가 ---
+if 'last_update_time' not in st.session_state:
+    st.session_state['last_update_time'] = 0
+if 'local_df' not in st.session_state:
+    st.session_state['local_df'] = pd.DataFrame()
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 if 'show_form' not in st.session_state:
     st.session_state['show_form'] = False
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
+
+# --- 1. 구글 스프레드시트 DB 연결 ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 🔥 [핵심 방어 코드] 저장 함수
+def save_to_db(dataframe):
+    save_df = dataframe.copy()
+    save_df['is_done'] = save_df['is_done'].apply(lambda x: "TRUE" if x else "FALSE")
+    conn.update(worksheet="Sheet1", data=save_df)
+    st.cache_data.clear() 
+    
+    # 저장 직후 5초 동안은 느린 구글 서버 대신 '내 컴퓨터의 최신 기억'을 믿도록 저장해둡니다.
+    st.session_state['local_df'] = dataframe.copy()
+    st.session_state['last_update_time'] = time.time()
+
+# --- 2. 데이터 불러오기 (철통 방어 로직 적용) ---
+try:
+    raw_df = conn.read(worksheet="Sheet1", ttl=5)
+    
+    # 🔥 내가 수정한 지 5초가 안 지났다면, 예전 데이터(raw_df)를 무시하고 최신 데이터(local_df)를 사용!
+    if time.time() - st.session_state['last_update_time'] < 5 and not st.session_state['local_df'].empty:
+        df = st.session_state['local_df'].copy()
+    else:
+        if raw_df is None or raw_df.empty or len(raw_df.columns) == 0:
+            df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+        else:
+            df = raw_df.copy()
+            if 'is_done' not in df.columns:
+                df['is_done'] = False
+            df['is_done'] = df['is_done'].apply(
+                lambda x: True if str(x).strip().upper() in ['TRUE', '1', '1.0'] else False
+            )
+except Exception as e:
+    st.error(f"⚠️ 구글 서버 지연으로 데이터를 불러오지 못했습니다. DB 보호를 위해 앱을 일시 정지합니다. 새로고침 해주세요. (에러: {e})")
+    st.stop() 
 
 # --- CSS 디자인 ---
 st.markdown("""
@@ -100,7 +113,7 @@ else:
             if submitted and title:
                 new_row = pd.DataFrame([{"id": str(uuid.uuid4()), "title": title, "category": category, "is_done": False}])
                 df = pd.concat([df, new_row], ignore_index=True)
-                save_to_db(df) # 🔥 전용 저장 함수 사용
+                save_to_db(df) 
                 st.session_state['show_success'] = True
                 st.session_state['show_form'] = False
                 st.rerun()
@@ -118,7 +131,7 @@ with ctrl_col2:
     if st.button("🔀", help="리스트 순서 섞기"):
         if not df.empty:
             df = df.sample(frac=1).reset_index(drop=True)
-            save_to_db(df) # 🔥 전용 저장 함수 사용
+            save_to_db(df)
             st.rerun()
 with ctrl_col3:
     st.empty()
@@ -169,7 +182,7 @@ else:
                             with btn_col1:
                                 if st.button("💾 저장", key=f"save_{tab_name}_{item_id}", use_container_width=True):
                                     df.loc[df['id'] == item_id, ['title', 'category']] = [new_title, new_category]
-                                    save_to_db(df) # 🔥 전용 저장 함수 사용
+                                    save_to_db(df) 
                                     st.session_state['edit_item_id'] = None
                                     st.rerun()
                             with btn_col2:
@@ -183,10 +196,16 @@ else:
                             
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
-                            # 체크박스 상태가 변경되었을 때만 DB 업데이트
+                            # 상태가 바뀌었을 때만 DB를 업데이트하고 다른 탭과 동기화
                             if is_checked != item_is_done:
                                 df.loc[df['id'] == item_id, 'is_done'] = is_checked
-                                save_to_db(df) # 🔥 전용 저장 함수 사용
+                                
+                                # 🔥 전체 탭과 카테고리 탭의 체크 상태를 강제로 일치시켜 루프 차단
+                                for t in TAB_LIST:
+                                    if f"check_{t}_{item_id}" in st.session_state:
+                                        st.session_state[f"check_{t}_{item_id}"] = is_checked
+                                        
+                                save_to_db(df)
                                 st.rerun()
                                 
                         with col2:
@@ -196,7 +215,7 @@ else:
                                     st.rerun()
                                 if st.button("🗑️ 삭제", key=f"del_{tab_name}_{item_id}", use_container_width=True):
                                     df = df[df['id'] != item_id]
-                                    save_to_db(df) # 🔥 전용 저장 함수 사용
+                                    save_to_db(df)
                                     st.rerun()
                         
                         st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
