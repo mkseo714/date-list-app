@@ -1,3 +1,96 @@
+import streamlit as st
+import pandas as pd
+import uuid
+from streamlit_gsheets import GSheetsConnection
+
+# --- 페이지 기본 설정 ---
+st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
+
+# --- 1. 구글 스프레드시트 DB 연결 ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 데이터 불러오기 (ttl=0 이면 항상 최신 데이터 로드)
+try:
+    df = conn.read(worksheet="Sheet1", ttl=0)
+    # 데이터가 비어있을 경우를 대비해 빈 구조 생성
+    if df is None or df.empty or len(df.columns) == 0:
+        df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+    else:
+        df['is_done'] = df['is_done'].astype(bool) # 완료 여부를 확실한 체크박스형(True/False)으로 변환
+except Exception as e:
+    st.error(f"구글 시트 연결 에러: {e}")
+    df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+
+# --- 세션 상태 초기화 ---
+if 'edit_item_id' not in st.session_state:
+    st.session_state['edit_item_id'] = None
+if 'show_form' not in st.session_state:
+    st.session_state['show_form'] = False
+if 'show_success' not in st.session_state:
+    st.session_state['show_success'] = False
+
+# --- 기존의 훌륭한 CSS 디자인 (동일하게 유지) ---
+st.markdown("""
+    <style>
+    .block-container {
+        padding-top: 1rem !important; padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important; max-width: 100% !important; overflow-x: hidden !important; 
+    }
+    hr { margin-top: 4px !important; margin-bottom: 4px !important; }
+    h3 { padding-top: 0px !important; padding-bottom: 3px !important; margin-top: 0px !important; margin-bottom: 5px !important; }
+    h1 { padding-bottom: 2px !important; font-size: 1.8rem !important; }
+    .stCheckbox { margin-top: 0px !important; margin-bottom: 0px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
+    .stCheckbox > div { min-height: 24px !important; }
+    [data-testid="stHorizontalBlock"]:has(.stCheckbox) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 0px !important; }
+    [data-testid="column"]:has(.stCheckbox) { min-width: 0 !important; padding: 0px !important; flex: 1 1 auto !important; width: calc(100% - 40px) !important; }
+    [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
+    [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("📝 우리 이거 하자!")
+
+CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
+TAB_LIST = ["전체"] + CATEGORY_LIST
+
+# --- 성공 메시지 ---
+if st.session_state['show_success']:
+    st.success("데이트 목록에 추가되었어요! 🥰")
+    st.session_state['show_success'] = False 
+
+# --- 2. 데이터 추가(Insert) 기능 ---
+if not st.session_state['show_form']:
+    if st.button("➕ 새로운 데이트 추가하기", use_container_width=True):
+        st.session_state['show_form'] = True
+        st.rerun()
+else:
+    with st.container(border=True):
+        with st.form("new_idea_form", clear_on_submit=True):
+            category = st.selectbox("카테고리", CATEGORY_LIST)
+            title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
+            
+            submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
+            if submitted and title:
+                # 새 데이터 행 생성
+                new_row = pd.DataFrame([{"id": str(uuid.uuid4()), "title": title, "category": category, "is_done": False}])
+                df = pd.concat([df, new_row], ignore_index=True)
+                
+                # 구글 시트에 쓰기
+                conn.update(worksheet="Sheet1", data=df)
+                
+                st.session_state['show_success'] = True
+                st.session_state['show_form'] = False
+                st.rerun()
+        
+        if st.button("닫기 🔺", use_container_width=True):
+            st.session_state['show_form'] = False
+            st.rerun()
+
+st.divider()
+
+# --- 탭 메뉴 구조 ---
+selected_tabs = st.tabs(TAB_LIST)
+
 # --- 3. 데이터 조회 및 수정/삭제 기능 ---
 if df.empty:
     st.info("아직 저장된 데이트 리스트가 없습니다.")
@@ -14,14 +107,13 @@ else:
             else:
                 st.subheader(f"📌 {tab_name} 리스트")
                 
-                # 데이터프레임의 각 줄(row)을 순회하며 화면에 그리기
                 for idx, row in filtered_df.iterrows():
-                    item_id = row['id']
+                    item_id = str(row['id'])
                     item_category = row['category']
                     item_title = row['title']
-                    item_is_done = row['is_done']
+                    item_is_done = bool(row['is_done'])
 
-                    # [A] 수정 모드 (key에 tab_name 추가)
+                    # [A] 수정 모드 (에러 났던 key 이름 중복 문제 완전 해결)
                     if st.session_state['edit_item_id'] == item_id:
                         with st.container(border=True):
                             try:
@@ -44,14 +136,13 @@ else:
                                     st.session_state['edit_item_id'] = None
                                     st.rerun()
                     
-                    # [B] 일반 리스트 화면 (key에 tab_name 추가)
+                    # [B] 일반 리스트 화면
                     else:
                         col1, col2 = st.columns([9, 1]) 
                         
                         with col1:
                             title_text = f"~~[{item_category}] {item_title}~~" if item_is_done else f"[{item_category}] {item_title}"
                             
-                            # 바로 여기서 에러가 났던 것입니다. 이름표(key)에 tab_name을 붙여 중복을 막았습니다.
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
                             if is_checked != item_is_done:
