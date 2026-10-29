@@ -1,14 +1,26 @@
 import streamlit as st
-from supabase import create_client
-
-# Supabase API 연결 세팅
-url = "https://qhskfxzfoghxncytwsep.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoc2tmeHpmb2doeG5jeXR3c2VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NjE3NTAsImV4cCI6MjEwMTMzNzc1MH0.oUo8yh0BA0KGMxjztuvMkpLCFBkIVKaQHYX0m0pZM5s"
-supabase = create_client(url, key)
+import pandas as pd
+import uuid
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="우리의 데이트 리스트", layout="centered")
 
-# 세션 상태 초기화 
+# --- 1. 구글 스프레드시트 DB 연결 ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 데이터 불러오기 (ttl=0 이면 항상 최신 데이터 로드)
+try:
+    df = conn.read(worksheet="Sheet1", ttl=0)
+    # 데이터가 비어있을 경우를 대비해 빈 구조 생성
+    if df.empty or len(df.columns) == 0:
+        df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+    else:
+        df['is_done'] = df['is_done'].astype(bool) # 완료 여부를 체크박스형(True/False)으로 확실히 변환
+except Exception as e:
+    st.error(f"구글 시트 연결 에러: {e}")
+    df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+
+# --- 세션 상태 초기화 ---
 if 'edit_item_id' not in st.session_state:
     st.session_state['edit_item_id'] = None
 if 'show_form' not in st.session_state:
@@ -16,77 +28,22 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# ★CSS: 간격 압축 및 리스트 디자인 최적화★
+# --- 기존에 만드신 훌륭한 CSS 디자인 (동일하게 유지) ---
 st.markdown("""
     <style>
     .block-container {
-        padding-top: 1rem !important;
-        padding-left: 1.2rem !important;
-        padding-right: 1.2rem !important;
-        max-width: 100% !important;
-        overflow-x: hidden !important; 
+        padding-top: 1rem !important; padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important; max-width: 100% !important; overflow-x: hidden !important; 
     }
-
-    hr {
-        margin-top: 4px !important;
-        margin-bottom: 4px !important;
-    }
-    h3 {
-        padding-top: 0px !important;
-        padding-bottom: 3px !important;
-        margin-top: 0px !important;
-        margin-bottom: 5px !important;
-    }
-    h1 {
-        padding-bottom: 2px !important;
-        font-size: 1.8rem !important;
-    }
-
-    .stCheckbox { 
-        margin-top: 0px !important; 
-        margin-bottom: 0px !important;
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
-    }
-    
-    .stCheckbox > div {
-        min-height: 24px !important;
-    }
-
-    [data-testid="stHorizontalBlock"]:has(.stCheckbox) {
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        width: 100% !important;
-        gap: 0px !important; 
-    }
-    
-    [data-testid="column"]:has(.stCheckbox) {
-        min-width: 0 !important;
-        padding: 0px !important;
-        flex: 1 1 auto !important;
-        width: calc(100% - 40px) !important; 
-    }
-
-    [data-testid="column"]:has([data-testid="stPopover"]) {
-        min-width: 0 !important;
-        padding: 0px !important;
-        flex: 0 0 35px !important;
-        width: 35px !important;
-        margin-right: 5px !important; 
-        display: flex;
-        justify-content: flex-end;
-    }
-
-    [data-testid="stPopover"] > button {
-        padding: 0px !important;
-        height: 30px !important;
-        width: 30px !important; 
-        border: none !important;
-        background: transparent !important;
-        font-size: 1.3rem !important; 
-        color: #888 !important; 
-    }
+    hr { margin-top: 4px !important; margin-bottom: 4px !important; }
+    h3 { padding-top: 0px !important; padding-bottom: 3px !important; margin-top: 0px !important; margin-bottom: 5px !important; }
+    h1 { padding-bottom: 2px !important; font-size: 1.8rem !important; }
+    .stCheckbox { margin-top: 0px !important; margin-bottom: 0px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
+    .stCheckbox > div { min-height: 24px !important; }
+    [data-testid="stHorizontalBlock"]:has(.stCheckbox) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 0px !important; }
+    [data-testid="column"]:has(.stCheckbox) { min-width: 0 !important; padding: 0px !important; flex: 1 1 auto !important; width: calc(100% - 40px) !important; }
+    [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
+    [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,7 +57,7 @@ if st.session_state['show_success']:
     st.success("데이트 목록에 추가되었어요! 🥰")
     st.session_state['show_success'] = False 
 
-# --- 새로운 항목 추가 폼 ---
+# --- 2. 데이터 추가(Insert) 기능 ---
 if not st.session_state['show_form']:
     if st.button("➕ 새로운 데이트 추가하기", use_container_width=True):
         st.session_state['show_form'] = True
@@ -113,7 +70,13 @@ else:
             
             submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
             if submitted and title:
-                supabase.table("date_ideas").insert({"title": title, "category": category, "is_done": False}).execute()
+                # 새 데이터 행 생성 (id는 겹치지 않게 uuid로 자동 생성)
+                new_row = pd.DataFrame([{"id": str(uuid.uuid4()), "title": title, "category": category, "is_done": False}])
+                df = pd.concat([df, new_row], ignore_index=True)
+                
+                # 구글 시트에 업데이트
+                conn.update(worksheet="Sheet1", data=df)
+                
                 st.session_state['show_success'] = True
                 st.session_state['show_form'] = False
                 st.rerun()
@@ -124,74 +87,79 @@ else:
 
 st.divider()
 
-# --- 탭 메뉴 구조 도입 ---
+# --- 탭 메뉴 구조 ---
 selected_tabs = st.tabs(TAB_LIST)
 
-# --- 데이터 불러오기 ---
-try:
-    response = supabase.table("date_ideas").select("*").order("created_at", desc=True).execute()
-    ideas = response.data
+# --- 3. 데이터 조회 및 수정/삭제 기능 ---
+if df.empty:
+    st.info("아직 저장된 데이트 리스트가 없습니다.")
+else:
+    for i, tab_name in enumerate(TAB_LIST):
+        with selected_tabs[i]:
+            if tab_name == "전체":
+                filtered_df = df
+            else:
+                filtered_df = df[df['category'] == tab_name]
 
-    if not ideas:
-        st.info("아직 저장된 데이트 리스트가 없습니다.")
-    else:
-        # 각 탭별로 순회하며 고유 키 부여
-        for i, tab_name in enumerate(TAB_LIST):
-            with selected_tabs[i]:
-                if tab_name == "전체":
-                    filtered_ideas = ideas
-                else:
-                    filtered_ideas = [idea for idea in ideas if idea['category'] == tab_name]
+            if filtered_df.empty:
+                st.info(f"'{tab_name}' 카테고리에 저장된 리스트가 없습니다.")
+            else:
+                st.subheader(f"📌 {tab_name} 리스트")
+                
+                # 데이터프레임의 각 줄(row)을 순회하며 화면에 그리기
+                for idx, row in filtered_df.iterrows():
+                    item_id = row['id']
+                    item_category = row['category']
+                    item_title = row['title']
+                    item_is_done = row['is_done']
 
-                if not filtered_ideas:
-                    st.info(f"'{tab_name}' 카테고리에 저장된 리스트가 없습니다.")
-                else:
-                    st.subheader(f"📌 {tab_name} 리스트")
-                    
-                    for idea in filtered_ideas:
-                        # [A] 수정 모드 (탭별 고유 키 적용)
-                        if st.session_state['edit_item_id'] == idea['id']:
-                            with st.container(border=True):
-                                try:
-                                    default_idx = CATEGORY_LIST.index(idea['category'])
-                                except ValueError:
-                                    default_idx = 0
-                                    
-                                new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{tab_name}_{idea['id']}")
-                                new_title = st.text_input("내용수정", value=idea['title'], key=f"title_{tab_name}_{idea['id']}")
-                                
-                                btn_col1, btn_col2 = st.columns(2)
-                                with btn_col1:
-                                    if st.button("💾 저장", key=f"save_{tab_name}_{idea['id']}", use_container_width=True):
-                                        supabase.table("date_ideas").update({"title": new_title, "category": new_category}).eq("id", idea['id']).execute()
-                                        st.session_state['edit_item_id'] = None
-                                        st.rerun()
-                                with btn_col2:
-                                    if st.button("❌ 취소", key=f"cancel_{tab_name}_{idea['id']}", use_container_width=True):
-                                        st.session_state['edit_item_id'] = None
-                                        st.rerun()
-                        
-                        # [B] 일반 리스트 화면 (탭별 고유 키 적용)
-                        else:
-                            col1, col2 = st.columns([9, 1]) 
+                    # [A] 수정 모드
+                    if st.session_state['edit_item_id'] == item_id:
+                        with st.container(border=True):
+                            try:
+                                default_idx = CATEGORY_LIST.index(item_category)
+                            except ValueError:
+                                default_idx = 0
                             
-                            with col1:
-                                title_text = f"~~[{idea['category']}] {idea['title']}~~" if idea['is_done'] else f"[{idea['category']}] {idea['title']}"
-                                is_checked = st.checkbox(title_text, value=idea['is_done'], key=f"check_{tab_name}_{idea['id']}")
-                                if is_checked != idea['is_done']:
-                                    supabase.table("date_ideas").update({"is_done": is_checked}).eq("id", idea['id']).execute()
+                            new_category = st.selectbox("카테고리수정", CATEGORY_LIST, index=default_idx, key=f"cat_{item_id}")
+                            new_title = st.text_input("내용수정", value=item_title, key=f"title_{item_id}")
+                            
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                if st.button("💾 저장", key=f"save_{item_id}", use_container_width=True):
+                                    # 해당 id의 행을 찾아 카테고리와 제목 업데이트
+                                    df.loc[df['id'] == item_id, ['title', 'category']] = [new_title, new_category]
+                                    conn.update(worksheet="Sheet1", data=df)
+                                    st.session_state['edit_item_id'] = None
                                     st.rerun()
-                                    
-                            with col2:
-                                with st.popover("☰", use_container_width=False):
-                                    if st.button("✏️ 수정", key=f"edit_{tab_name}_{idea['id']}", use_container_width=True):
-                                        st.session_state['edit_item_id'] = idea['id']
-                                        st.rerun()
-                                    if st.button("🗑️ 삭제", key=f"del_{tab_name}_{idea['id']}", use_container_width=True):
-                                        supabase.table("date_ideas").delete().eq("id", idea['id']).execute()
-                                        st.rerun()
-                                    
-                            st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
-
-except Exception as e:
-    st.error(f"데이터베이스 연결 에러: {e}")
+                            with btn_col2:
+                                if st.button("❌ 취소", key=f"cancel_{item_id}", use_container_width=True):
+                                    st.session_state['edit_item_id'] = None
+                                    st.rerun()
+                    
+                    # [B] 일반 리스트 화면 (체크박스 및 팝오버)
+                    else:
+                        col1, col2 = st.columns([9, 1]) 
+                        
+                        with col1:
+                            title_text = f"~~[{item_category}] {item_title}~~" if item_is_done else f"[{item_category}] {item_title}"
+                            is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{item_id}")
+                            
+                            if is_checked != item_is_done:
+                                # 완료 여부(체크박스) 업데이트
+                                df.loc[df['id'] == item_id, 'is_done'] = is_checked
+                                conn.update(worksheet="Sheet1", data=df)
+                                st.rerun()
+                                
+                        with col2:
+                            with st.popover("☰", use_container_width=False):
+                                if st.button("✏️ 수정", key=f"edit_{item_id}", use_container_width=True):
+                                    st.session_state['edit_item_id'] = item_id
+                                    st.rerun()
+                                if st.button("🗑️ 삭제", key=f"del_{item_id}", use_container_width=True):
+                                    # 해당 id를 가진 행만 빼고(삭제) 다시 저장
+                                    df = df[df['id'] != item_id]
+                                    conn.update(worksheet="Sheet1", data=df)
+                                    st.rerun()
+                        
+                        st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
