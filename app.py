@@ -9,13 +9,14 @@ st.set_page_config(page_title="우리의 데이트 리스트", layout="centered"
 # --- 1. 구글 스프레드시트 DB 연결 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 데이터 불러오기
+# 데이터 불러오기 (캐시 유지 시간은 5초로 두되, 변경 시 강제 초기화 적용)
 try:
     df = conn.read(worksheet="Sheet1", ttl=5)
     if df is None or df.empty or len(df.columns) == 0:
         df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
     else:
-        df['is_done'] = df['is_done'].astype(bool)
+        # [수정] 구글 시트의 텍스트를 파이썬이 절대 헷갈리지 않게 확실한 True/False로 변환
+        df['is_done'] = df['is_done'].astype(str).str.upper() == 'TRUE'
 except Exception as e:
     st.error(f"구글 시트 연결 에러: {e}")
     df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
@@ -28,7 +29,7 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# --- CSS 디자인 (섞기 버튼 투명화 및 밀착 정렬) ---
+# --- CSS 디자인 ---
 st.markdown("""
     <style>
     .block-container {
@@ -42,29 +43,24 @@ st.markdown("""
     .stCheckbox { margin-top: 0px !important; margin-bottom: 0px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
     .stCheckbox > div { min-height: 24px !important; }
     
-    /* 리스트 아이템 가로 정렬 강제 */
     [data-testid="stHorizontalBlock"]:has(.stCheckbox) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 0px !important; }
     [data-testid="column"]:has(.stCheckbox) { min-width: 0 !important; padding: 0px !important; flex: 1 1 auto !important; width: calc(100% - 40px) !important; }
     
-    /* 팝오버(수정/삭제) 메뉴 버튼 크기 */
     [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
     [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
     
-    /* 🔥 [수정] 컨트롤 패널(토글+섞기심볼) 한 줄 정렬 */
     [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) { 
         flex-direction: row !important; 
         flex-wrap: nowrap !important; 
         align-items: center !important; 
     }
-    
-    /* 🔥 [수정] 섞기 버튼의 회색 테두리를 완전히 없애고 투명한 아이콘처럼 만들기 */
     [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) div[data-testid="stButton"] > button {
         border: none !important;
         background: transparent !important;
         font-size: 1.5rem !important;
         box-shadow: none !important;
         padding: 0px !important;
-        margin-left: -15px !important; /* 토글 쪽으로 조금 더 밀착 */
+        margin-left: -15px !important; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -96,6 +92,9 @@ else:
                 df = pd.concat([df, new_row], ignore_index=True)
                 conn.update(worksheet="Sheet1", data=df)
                 
+                # 🔥 [수정] 데이터 업데이트 직후 캐시 강제 초기화
+                st.cache_data.clear() 
+                
                 st.session_state['show_success'] = True
                 st.session_state['show_form'] = False
                 st.rerun()
@@ -106,19 +105,19 @@ else:
 
 st.divider()
 
-# --- [수정] 컨트롤 패널 (토글, 섞기버튼, 빈공간으로 3등분하여 왼쪽 정렬 밀착) ---
+# --- 컨트롤 패널 ---
 ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([4, 1, 5], vertical_alignment="center")
 with ctrl_col1:
     hide_completed = st.toggle("👻 완료된 항목 숨기기", value=False)
 with ctrl_col2:
-    # use_container_width=True 를 제거하여 가로로 길게 늘어나는 것을 방지합니다.
     if st.button("🔀", help="리스트 순서 섞기"):
         if not df.empty:
             df = df.sample(frac=1).reset_index(drop=True)
             conn.update(worksheet="Sheet1", data=df)
+            st.cache_data.clear() # 🔥 캐시 지우기
             st.rerun()
 with ctrl_col3:
-    st.empty() # 우측 빈 공간 채우기
+    st.empty()
 
 st.divider()
 
@@ -169,6 +168,7 @@ else:
                                 if st.button("💾 저장", key=f"save_{tab_name}_{item_id}", use_container_width=True):
                                     df.loc[df['id'] == item_id, ['title', 'category']] = [new_title, new_category]
                                     conn.update(worksheet="Sheet1", data=df)
+                                    st.cache_data.clear() # 🔥 캐시 지우기
                                     st.session_state['edit_item_id'] = None
                                     st.rerun()
                             with btn_col2:
@@ -182,11 +182,14 @@ else:
                         
                         with col1:
                             title_text = f"~~[{item_category}] {item_title}~~" if item_is_done else f"[{item_category}] {item_title}"
+                            
+                            # 🔥 이제 여기서 체크/해제를 누르면 무한루프 없이 완벽하게 작동합니다.
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
                             if is_checked != item_is_done:
                                 df.loc[df['id'] == item_id, 'is_done'] = is_checked
                                 conn.update(worksheet="Sheet1", data=df)
+                                st.cache_data.clear() # 🔥 캐시 지우기 (가장 중요)
                                 st.rerun()
                                 
                         with col2:
@@ -197,6 +200,7 @@ else:
                                 if st.button("🗑️ 삭제", key=f"del_{tab_name}_{item_id}", use_container_width=True):
                                     df = df[df['id'] != item_id]
                                     conn.update(worksheet="Sheet1", data=df)
+                                    st.cache_data.clear() # 🔥 캐시 지우기
                                     st.rerun()
                         
                         st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
