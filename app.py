@@ -17,7 +17,7 @@ def save_to_db(dataframe):
     conn.update(worksheet="Sheet1", data=save_df)
     st.cache_data.clear() # 저장 직후 캐시 완벽 삭제
 
-# --- 2. 데이터 불러오기 (철통 방어 로직 적용) ---
+# --- 2. 데이터 불러오기 (철통 방어 로직 적용) --- 
 try:
     df = conn.read(worksheet="Sheet1", ttl=2) # 과부하 방지를 위해 2초 딜레이 적용
     if df is None or df.empty or len(df.columns) == 0:
