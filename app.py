@@ -9,17 +9,29 @@ st.set_page_config(page_title="우리의 데이트 리스트", layout="centered"
 # --- 1. 구글 스프레드시트 DB 연결 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 데이터 불러오기 (캐시 유지 시간은 5초로 두되, 변경 시 강제 초기화 적용)
+# 🔥 [핵심 방어 코드] 구글 시트에 저장할 때 무조건 텍스트로만 꽂아넣는 전용 함수
+def save_to_db(dataframe):
+    save_df = dataframe.copy()
+    # 파이썬의 체크 상태를 구글 시트가 100% 인식하는 텍스트 "TRUE", "FALSE"로 강제 변환해서 저장
+    save_df['is_done'] = save_df['is_done'].apply(lambda x: "TRUE" if x else "FALSE")
+    conn.update(worksheet="Sheet1", data=save_df)
+    st.cache_data.clear() # 저장 직후 캐시 완벽 삭제
+
+# --- 2. 데이터 불러오기 (철통 방어 로직 적용) ---
 try:
-    df = conn.read(worksheet="Sheet1", ttl=5)
+    df = conn.read(worksheet="Sheet1", ttl=2) # 과부하 방지를 위해 2초 딜레이 적용
     if df is None or df.empty or len(df.columns) == 0:
         df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
     else:
-        # [수정] 구글 시트의 텍스트를 파이썬이 절대 헷갈리지 않게 확실한 True/False로 변환
-        df['is_done'] = df['is_done'].astype(str).str.upper() == 'TRUE'
+        if 'is_done' not in df.columns:
+            df['is_done'] = False
+        # 🔥 구글 시트에서 읽어올 때 어떤 형태든 찰떡같이 파이썬 True/False로 번역하는 로직
+        df['is_done'] = df['is_done'].apply(
+            lambda x: True if str(x).strip().upper() in ['TRUE', '1', '1.0'] else False
+        )
 except Exception as e:
-    st.error(f"구글 시트 연결 에러: {e}")
-    df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
+    st.error(f"⚠️ 구글 서버 지연으로 데이터를 불러오지 못했습니다. DB 보호를 위해 앱을 일시 정지합니다. 새로고침 해주세요. (에러: {e})")
+    st.stop() 
 
 # --- 세션 상태 초기화 ---
 if 'edit_item_id' not in st.session_state:
@@ -70,12 +82,11 @@ st.title("📝 우리 이거 하자!")
 CATEGORY_LIST = ["🍽️ 맛집", "🎬 영화", "🏖️ 여행", "🎯 액티비티"]
 TAB_LIST = ["전체"] + CATEGORY_LIST
 
-# --- 성공 메시지 ---
 if st.session_state['show_success']:
     st.success("데이트 목록에 추가되었어요! 🥰")
     st.session_state['show_success'] = False 
 
-# --- 2. 데이터 추가(Insert) 기능 ---
+# --- 3. 데이터 추가 기능 ---
 if not st.session_state['show_form']:
     if st.button("➕ 새로운 데이트 추가하기", use_container_width=True):
         st.session_state['show_form'] = True
@@ -85,20 +96,14 @@ else:
         with st.form("new_idea_form", clear_on_submit=True):
             category = st.selectbox("카테고리", CATEGORY_LIST)
             title = st.text_input("내용", placeholder="어디갈까? / 뭘할까?")
-            
             submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
             if submitted and title:
                 new_row = pd.DataFrame([{"id": str(uuid.uuid4()), "title": title, "category": category, "is_done": False}])
                 df = pd.concat([df, new_row], ignore_index=True)
-                conn.update(worksheet="Sheet1", data=df)
-                
-                # 🔥 [수정] 데이터 업데이트 직후 캐시 강제 초기화
-                st.cache_data.clear() 
-                
+                save_to_db(df) # 🔥 전용 저장 함수 사용
                 st.session_state['show_success'] = True
                 st.session_state['show_form'] = False
                 st.rerun()
-        
         if st.button("닫기 🔺", use_container_width=True):
             st.session_state['show_form'] = False
             st.rerun()
@@ -113,18 +118,16 @@ with ctrl_col2:
     if st.button("🔀", help="리스트 순서 섞기"):
         if not df.empty:
             df = df.sample(frac=1).reset_index(drop=True)
-            conn.update(worksheet="Sheet1", data=df)
-            st.cache_data.clear() # 🔥 캐시 지우기
+            save_to_db(df) # 🔥 전용 저장 함수 사용
             st.rerun()
 with ctrl_col3:
     st.empty()
 
 st.divider()
 
-# --- 탭 메뉴 구조 ---
+# --- 탭 메뉴 구조 및 리스트 출력 ---
 selected_tabs = st.tabs(TAB_LIST)
 
-# --- 3. 데이터 조회 및 수정/삭제 기능 ---
 if df.empty:
     st.info("아직 저장된 데이트 리스트가 없습니다.")
 else:
@@ -152,7 +155,6 @@ else:
                     item_title = row['title']
                     item_is_done = bool(row['is_done'])
 
-                    # [A] 수정 모드
                     if st.session_state['edit_item_id'] == item_id:
                         with st.container(border=True):
                             try:
@@ -167,29 +169,24 @@ else:
                             with btn_col1:
                                 if st.button("💾 저장", key=f"save_{tab_name}_{item_id}", use_container_width=True):
                                     df.loc[df['id'] == item_id, ['title', 'category']] = [new_title, new_category]
-                                    conn.update(worksheet="Sheet1", data=df)
-                                    st.cache_data.clear() # 🔥 캐시 지우기
+                                    save_to_db(df) # 🔥 전용 저장 함수 사용
                                     st.session_state['edit_item_id'] = None
                                     st.rerun()
                             with btn_col2:
                                 if st.button("❌ 취소", key=f"cancel_{tab_name}_{item_id}", use_container_width=True):
                                     st.session_state['edit_item_id'] = None
                                     st.rerun()
-                    
-                    # [B] 일반 리스트 화면
                     else:
                         col1, col2 = st.columns([9, 1]) 
-                        
                         with col1:
                             title_text = f"~~[{item_category}] {item_title}~~" if item_is_done else f"[{item_category}] {item_title}"
                             
-                            # 🔥 이제 여기서 체크/해제를 누르면 무한루프 없이 완벽하게 작동합니다.
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
+                            # 체크박스 상태가 변경되었을 때만 DB 업데이트
                             if is_checked != item_is_done:
                                 df.loc[df['id'] == item_id, 'is_done'] = is_checked
-                                conn.update(worksheet="Sheet1", data=df)
-                                st.cache_data.clear() # 🔥 캐시 지우기 (가장 중요)
+                                save_to_db(df) # 🔥 전용 저장 함수 사용
                                 st.rerun()
                                 
                         with col2:
@@ -199,8 +196,7 @@ else:
                                     st.rerun()
                                 if st.button("🗑️ 삭제", key=f"del_{tab_name}_{item_id}", use_container_width=True):
                                     df = df[df['id'] != item_id]
-                                    conn.update(worksheet="Sheet1", data=df)
-                                    st.cache_data.clear() # 🔥 캐시 지우기
+                                    save_to_db(df) # 🔥 전용 저장 함수 사용
                                     st.rerun()
                         
                         st.markdown("<hr style='margin: 4px 0px 4px 0px;'/>", unsafe_allow_html=True)
