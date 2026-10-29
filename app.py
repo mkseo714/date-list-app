@@ -28,7 +28,7 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# --- CSS 디자인 ---
+# --- CSS 디자인 (모바일 컨트롤 패널 정렬 포함) ---
 st.markdown("""
     <style>
     .block-container {
@@ -38,12 +38,20 @@ st.markdown("""
     hr { margin-top: 4px !important; margin-bottom: 4px !important; }
     h3 { padding-top: 0px !important; padding-bottom: 3px !important; margin-top: 0px !important; margin-bottom: 5px !important; }
     h1 { padding-bottom: 2px !important; font-size: 1.8rem !important; }
+    
     .stCheckbox { margin-top: 0px !important; margin-bottom: 0px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
     .stCheckbox > div { min-height: 24px !important; }
+    
+    /* 리스트 아이템 가로 정렬 강제 */
     [data-testid="stHorizontalBlock"]:has(.stCheckbox) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 0px !important; }
     [data-testid="column"]:has(.stCheckbox) { min-width: 0 !important; padding: 0px !important; flex: 1 1 auto !important; width: calc(100% - 40px) !important; }
+    
+    /* 팝오버(수정/삭제) 메뉴 버튼 크기 */
     [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
     [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
+    
+    /* 컨트롤 패널(토글+섞기버튼) 모바일 한 줄 정렬 강제 */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stCheckbox"]) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -84,14 +92,15 @@ else:
 
 st.divider()
 
-# --- [신규 추가] 컨트롤 패널 (완료 숨기기 & 섞기) ---
-ctrl_col1, ctrl_col2 = st.columns([1, 1])
+# --- [수정됨] 컨트롤 패널 (모바일 최적화: 8대 2 비율 + 심볼 버튼) ---
+# 세로 정렬(vertical_alignment="center")을 추가하여 버튼과 토글의 높낮이를 예쁘게 맞춥니다.
+ctrl_col1, ctrl_col2 = st.columns([8, 2], vertical_alignment="center")
 with ctrl_col1:
     hide_completed = st.toggle("👻 완료된 항목 숨기기", value=False)
 with ctrl_col2:
-    if st.button("🔀 리스트 순서 섞기", use_container_width=True):
+    # 텍스트 없이 이모지 🔀 만 넣고, 마우스를 올렸을 때만 '리스트 순서 섞기'라고 뜨게(help) 만듭니다.
+    if st.button("🔀", help="리스트 순서 섞기", use_container_width=True):
         if not df.empty:
-            # 데이터프레임을 무작위로 섞고 구글 시트에 즉시 덮어쓰기 (둘 다 랜덤 순서 공유)
             df = df.sample(frac=1).reset_index(drop=True)
             conn.update(worksheet="Sheet1", data=df)
             st.rerun()
@@ -112,7 +121,6 @@ else:
             else:
                 filtered_df = df[df['category'] == tab_name]
 
-            # [신규 추가] 숨기기 토글이 켜져 있으면, 완료된 항목 제외하기
             if hide_completed:
                 filtered_df = filtered_df[filtered_df['is_done'] == False]
 
