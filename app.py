@@ -9,7 +9,7 @@ st.set_page_config(page_title="우리의 데이트 리스트", layout="centered"
 # --- 1. 구글 스프레드시트 DB 연결 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 데이터 불러오기 (ttl=0 이면 항상 최신 데이터 로드)
+# 데이터 불러오기
 try:
     df = conn.read(worksheet="Sheet1", ttl=0)
     if df is None or df.empty or len(df.columns) == 0:
@@ -28,7 +28,7 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# --- CSS 디자인 (모바일 컨트롤 패널 정렬 포함) ---
+# --- CSS 디자인 (모바일 최적화 및 심볼 버튼 투명화) ---
 st.markdown("""
     <style>
     .block-container {
@@ -50,8 +50,22 @@ st.markdown("""
     [data-testid="column"]:has([data-testid="stPopover"]) { min-width: 0 !important; padding: 0px !important; flex: 0 0 35px !important; width: 35px !important; margin-right: 5px !important; display: flex; justify-content: flex-end; }
     [data-testid="stPopover"] > button { padding: 0px !important; height: 30px !important; width: 30px !important; border: none !important; background: transparent !important; font-size: 1.3rem !important; color: #888 !important; }
     
-    /* 컨트롤 패널(토글+섞기버튼) 모바일 한 줄 정렬 강제 */
-    [data-testid="stHorizontalBlock"]:has([data-testid="stCheckbox"]) { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; }
+    /* 🔥 [신규] 컨트롤 패널(토글+섞기심볼) 모바일 강제 한 줄 정렬 */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) { 
+        flex-direction: row !important; 
+        flex-wrap: nowrap !important; 
+        align-items: center !important; 
+    }
+    
+    /* 🔥 [신규] 섞기 버튼을 투명한 아이콘으로 만들고 가장 왼쪽으로 밀착 */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) div[data-testid="stButton"] > button {
+        justify-content: flex-start !important;
+        padding: 0px !important;
+        border: none !important;
+        background: transparent !important;
+        font-size: 1.8rem !important;
+        box-shadow: none !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -92,13 +106,11 @@ else:
 
 st.divider()
 
-# --- [수정됨] 컨트롤 패널 (모바일 최적화: 8대 2 비율 + 심볼 버튼) ---
-# 세로 정렬(vertical_alignment="center")을 추가하여 버튼과 토글의 높낮이를 예쁘게 맞춥니다.
+# --- 컨트롤 패널 (토글 80%, 심볼 버튼 20% 비율 할당) ---
 ctrl_col1, ctrl_col2 = st.columns([8, 2], vertical_alignment="center")
 with ctrl_col1:
     hide_completed = st.toggle("👻 완료된 항목 숨기기", value=False)
 with ctrl_col2:
-    # 텍스트 없이 이모지 🔀 만 넣고, 마우스를 올렸을 때만 '리스트 순서 섞기'라고 뜨게(help) 만듭니다.
     if st.button("🔀", help="리스트 순서 섞기", use_container_width=True):
         if not df.empty:
             df = df.sample(frac=1).reset_index(drop=True)
