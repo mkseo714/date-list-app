@@ -12,11 +12,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # 데이터 불러오기 (ttl=0 이면 항상 최신 데이터 로드)
 try:
     df = conn.read(worksheet="Sheet1", ttl=0)
-    # 데이터가 비어있을 경우를 대비해 빈 구조 생성
     if df is None or df.empty or len(df.columns) == 0:
         df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
     else:
-        df['is_done'] = df['is_done'].astype(bool) # 완료 여부를 확실한 체크박스형(True/False)으로 변환
+        df['is_done'] = df['is_done'].astype(bool)
 except Exception as e:
     st.error(f"구글 시트 연결 에러: {e}")
     df = pd.DataFrame(columns=["id", "title", "category", "is_done"])
@@ -29,7 +28,7 @@ if 'show_form' not in st.session_state:
 if 'show_success' not in st.session_state:
     st.session_state['show_success'] = False
 
-# --- 기존의 훌륭한 CSS 디자인 (동일하게 유지) ---
+# --- CSS 디자인 ---
 st.markdown("""
     <style>
     .block-container {
@@ -71,11 +70,8 @@ else:
             
             submitted = st.form_submit_button("✅ 추가하기", use_container_width=True)
             if submitted and title:
-                # 새 데이터 행 생성
                 new_row = pd.DataFrame([{"id": str(uuid.uuid4()), "title": title, "category": category, "is_done": False}])
                 df = pd.concat([df, new_row], ignore_index=True)
-                
-                # 구글 시트에 쓰기
                 conn.update(worksheet="Sheet1", data=df)
                 
                 st.session_state['show_success'] = True
@@ -84,6 +80,20 @@ else:
         
         if st.button("닫기 🔺", use_container_width=True):
             st.session_state['show_form'] = False
+            st.rerun()
+
+st.divider()
+
+# --- [신규 추가] 컨트롤 패널 (완료 숨기기 & 섞기) ---
+ctrl_col1, ctrl_col2 = st.columns([1, 1])
+with ctrl_col1:
+    hide_completed = st.toggle("👻 완료된 항목 숨기기", value=False)
+with ctrl_col2:
+    if st.button("🔀 리스트 순서 섞기", use_container_width=True):
+        if not df.empty:
+            # 데이터프레임을 무작위로 섞고 구글 시트에 즉시 덮어쓰기 (둘 다 랜덤 순서 공유)
+            df = df.sample(frac=1).reset_index(drop=True)
+            conn.update(worksheet="Sheet1", data=df)
             st.rerun()
 
 st.divider()
@@ -102,8 +112,15 @@ else:
             else:
                 filtered_df = df[df['category'] == tab_name]
 
+            # [신규 추가] 숨기기 토글이 켜져 있으면, 완료된 항목 제외하기
+            if hide_completed:
+                filtered_df = filtered_df[filtered_df['is_done'] == False]
+
             if filtered_df.empty:
-                st.info(f"'{tab_name}' 카테고리에 저장된 리스트가 없습니다.")
+                if hide_completed:
+                    st.info("아직 완료하지 않은 데이트가 없네요! 새로 추가해볼까요?")
+                else:
+                    st.info(f"'{tab_name}' 카테고리에 저장된 리스트가 없습니다.")
             else:
                 st.subheader(f"📌 {tab_name} 리스트")
                 
@@ -113,7 +130,7 @@ else:
                     item_title = row['title']
                     item_is_done = bool(row['is_done'])
 
-                    # [A] 수정 모드 (에러 났던 key 이름 중복 문제 완전 해결)
+                    # [A] 수정 모드
                     if st.session_state['edit_item_id'] == item_id:
                         with st.container(border=True):
                             try:
@@ -142,7 +159,6 @@ else:
                         
                         with col1:
                             title_text = f"~~[{item_category}] {item_title}~~" if item_is_done else f"[{item_category}] {item_title}"
-                            
                             is_checked = st.checkbox(title_text, value=item_is_done, key=f"check_{tab_name}_{item_id}")
                             
                             if is_checked != item_is_done:
